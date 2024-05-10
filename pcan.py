@@ -23,38 +23,38 @@ class CAN():
             print(self.get_error_text(result))
             return
 
-        # main loop
-        while True:
-            result = PCANBasic.PCAN_ERROR_OK
-            while (not (result & PCANBasic.PCAN_ERROR_QRCVEMPTY)):
-                result = self.read()
-                if result != PCANBasic.PCAN_ERROR_OK and result != PCANBasic.PCAN_ERROR_QRCVEMPTY:
-                    print(self.get_error_text(result))
-                    return
-
     def read(self):
         if self.isFD:
             result = self.can.ReadFD(self.usb_bus)
         else:
             result = self.can.Read(self.usb_bus)
+        message = None
+        timestamp = None
 
         if result[0] == PCANBasic.PCAN_ERROR_OK:
             message = result[1]
-            message_id = '%.3X' % message.ID
-            if (message.MSGTYPE & PCANBasic.PCAN_MESSAGE_EXTENDED.value) == PCANBasic.PCAN_MESSAGE_EXTENDED.value:
-                message_id = '%.8X' % message.ID
-            message_hex = b''
-            for message_byte in message.DATA:
-                message_hex += b'%.2X ' % message_byte
-            message_hex = str(message_hex).replace("'", "", 2).replace("b", "", 1)
-
             timestamp = result[2]
             if not self.isFD:
-                timestamp = timestamp.micros + (1000 * timestamp.millis) + (0x100000000 * 1000 * timestamp.millis_overflow)
+                timestamp = timestamp.micros + (1000 * timestamp.millis) + \
+                            (0x100000000 * 1000 * timestamp.millis_overflow)
 
-            print(timestamp, message_id, message_hex)
+        return result[0], message, timestamp
 
-        return result[0]
+    def print_message(self, message, timestamp):
+        print(timestamp, self.get_message_id_text(message), self.get_message_hex(message))
+
+    def get_message_id_text(self, message):
+        message_id = '%.3X' % message.ID
+        if (message.MSGTYPE & PCANBasic.PCAN_MESSAGE_EXTENDED.value) == PCANBasic.PCAN_MESSAGE_EXTENDED.value:
+            message_id = '%.8X' % message.ID
+        return message_id
+
+    def get_message_hex(self, message):
+        message_hex = b''
+        for message_byte in message.DATA:
+            message_hex += b'%.2X ' % message_byte
+        message_hex = str(message_hex).replace("'", "", 2).replace("b", "", 1)
+        return message_hex
 
     def get_error_text(self, error):
         result = self.can.GetErrorText(error, 0x09)
@@ -63,6 +63,3 @@ class CAN():
         else:
             message = str(result[1])
             return message.replace("'", "", 2).replace("b", "", 1)
-
-
-can1 = CAN(bitrate=PCANBasic.PCAN_BAUD_1M)
